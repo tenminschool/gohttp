@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+type (
+	BeforeRequestHook func(*Request) error
+	AfterResponseHook func(*Response) error
+	ErrorHook         func(*Request, error)
+)
+
 // Request is a request type
 type Request struct {
 	transport              *http.Transport
@@ -25,6 +31,9 @@ type Request struct {
 	writer                 *multipart.Writer
 	contentType            string
 	basicUser, basicPasswd string
+	beforeRequestHooks     []BeforeRequestHook
+	afterResponseHooks     []AfterResponseHook
+	errorHooks             []ErrorHook
 }
 
 // MultipartParam is a multipart param type
@@ -245,8 +254,43 @@ func (req *Request) UploadsFromReader(params []MultipartParam) *Request {
 	return req
 }
 
+func (req *Request) OnBeforeRequest(hook BeforeRequestHook) *Request {
+	req.beforeRequestHooks = append(req.beforeRequestHooks, hook)
+	return req
+}
+
+func (req *Request) OnAfterResponse(hook AfterResponseHook) *Request {
+
+	req.afterResponseHooks = append(req.afterResponseHooks, hook)
+	return req
+}
+func (req *Request) OnError(errorHook ErrorHook) *Request {
+	req.errorHooks = append(req.errorHooks, errorHook)
+	return req
+}
+
+func (req *Request) ExecuteBeforeRequestHooks() {
+	for _, beforeReqHook := range req.beforeRequestHooks {
+		beforeReqHook(req)
+	}
+}
+
+func (req *Request) ExecuteAfterResponseHooks(response Response) {
+	for _, afterResponseHook := range req.afterResponseHooks {
+		afterResponseHook(&response)
+	}
+}
+
+func (req *Request) ExecuteOnErrorHooks(err error) {
+	for _, errorHooks := range req.errorHooks {
+		errorHooks(req, err)
+	}
+}
+
 // makeRequest makes a http request
 func (req *Request) makeRequest(verb, url string, payloads *bytes.Buffer) (*Response, error) {
+	req.ExecuteBeforeRequestHooks()
+
 	response := Response{}
 	verb = strings.ToUpper(verb)
 	var request *http.Request
@@ -271,6 +315,7 @@ func (req *Request) makeRequest(verb, url string, payloads *bytes.Buffer) (*Resp
 	}
 
 	if err != nil {
+		req.ExecuteOnErrorHooks(err)
 		return nil, err
 	}
 
@@ -285,15 +330,18 @@ func (req *Request) makeRequest(verb, url string, payloads *bytes.Buffer) (*Resp
 		request.Header.Set(key, val)
 	}
 
-	if val,ok := req.headers["Host"]; ok  {
+	if val, ok := req.headers["Host"]; ok {
 		request.Host = val
 	}
 	//request.Close = true
 	resp, err := client.Do(request)
 
 	if err != nil {
+		req.ExecuteOnErrorHooks(err)
 		return nil, err
 	}
 	response.resp = resp
+	req.ExecuteAfterResponseHooks(response)
+
 	return &response, nil
 }
