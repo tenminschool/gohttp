@@ -2,6 +2,7 @@ package gohttp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -34,6 +35,7 @@ type Request struct {
 	beforeRequestHooks     []BeforeRequestHook
 	afterResponseHooks     []AfterResponseHook
 	errorHooks             []ErrorHook
+	ctx                    context.Context
 }
 
 // MultipartParam is a multipart param type
@@ -285,6 +287,24 @@ func (req *Request) ExecuteOnErrorHooks(err error) {
 	for _, errorHooks := range req.errorHooks {
 		errorHooks(req, err)
 	}
+}
+
+// Context method returns the Context if it is already set in the [Request]
+// otherwise, it creates a new one using [context.Background].
+func (r *Request) Context() context.Context {
+	if r.ctx == nil {
+		return context.Background()
+	}
+	return r.ctx
+}
+
+// SetContext method sets the [context.Context] for current [Request]. It allows
+// to interrupt the request execution if `ctx.Done()` channel is closed.
+// See https://blog.golang.org/context article and the package [context]
+// documentation.
+func (r *Request) SetContext(ctx context.Context) *Request {
+	r.ctx = ctx
+	return r
 }
 
 // makeRequest makes a http request
