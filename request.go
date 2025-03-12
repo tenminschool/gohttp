@@ -15,7 +15,7 @@ import (
 
 type (
 	BeforeRequestHook func(*Request) error
-	AfterResponseHook func(*Response) error
+	AfterResponseHook func(*Request, *Response) error
 	ErrorHook         func(*Request, error)
 )
 
@@ -279,7 +279,7 @@ func (req *Request) ExecuteBeforeRequestHooks() {
 
 func (req *Request) ExecuteAfterResponseHooks(response Response) {
 	for _, afterResponseHook := range req.afterResponseHooks {
-		afterResponseHook(&response)
+		afterResponseHook(req, &response)
 	}
 }
 
